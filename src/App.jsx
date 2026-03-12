@@ -296,7 +296,7 @@ Instructions:
             </div>
             <div className="flex items-center justify-between">
               <span className="text-amber-400 text-xs font-mono">Full Resume + Download</span>
-              <span className="text-amber-400 text-xs font-mono">₹250</span>
+              <span className="text-amber-400 text-xs font-mono">₹99</span>
             </div>
             <div className="h-px bg-stone-800 my-1" />
             <p className="text-stone-600 text-xs font-mono">One-time payment · Instant unlock · No subscription</p>
@@ -359,7 +359,7 @@ Instructions:
                         disabled={loading}
                         className="bg-amber-500 hover:bg-amber-400 disabled:bg-stone-700 disabled:text-stone-500 text-stone-950 font-mono font-medium text-sm px-8 py-3.5 rounded-sm tracking-wider uppercase transition-all duration-200 inline-flex items-center gap-2 shadow-lg"
                       >
-                        {loading ? <><span className="text-stone-400 text-xs">Please wait</span><LoadingDots /></> : <>✦ Unlock Full Resume — ₹250</>}
+                        {loading ? <><span className="text-stone-400 text-xs">Please wait</span><LoadingDots /></> : <>✦ Unlock Full Resume — ₹99</>}
                       </button>
                       <p className="text-stone-600 text-xs font-mono mt-3">
                         One-time payment · Secure checkout via Razorpay
