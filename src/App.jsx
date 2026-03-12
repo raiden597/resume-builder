@@ -24,6 +24,8 @@ const InputField = ({ label, id, children }) => (
 const inputClass =
   "bg-stone-900 border border-stone-700 rounded-sm px-3 py-2.5 text-stone-100 font-mono text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/30 transition-colors resize-none w-full";
 
+const STRIPE_LINK = "https://rzp.io/rzp/9rtuKrD";
+
 export default function ResumeGenerator() {
   const [form, setForm] = useState({
     name: "",
@@ -36,6 +38,9 @@ export default function ResumeGenerator() {
   const [resume, setResume] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [paid] = useState(
+    new URLSearchParams(window.location.search).get("paid") === "true"
+  );
   const previewRef = useRef(null);
 
   const update = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -84,13 +89,10 @@ Instructions:
       });
 
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data?.error?.message || "API request failed");
-      }
-
-      const text = data.choices?.[0]?.message?.content;
+      if (!res.ok) throw new Error(data?.error?.message || "API request failed");
+      let text = data.choices?.[0]?.message?.content;
       if (!text) throw new Error("No response received");
+      text = text.replace(/^```markdown\n?/i, "").replace(/^```\n?/, "").replace(/```$/, "").trim();
       setResume(text);
     } catch (err) {
       setError(`Error: ${err.message}`);
@@ -129,6 +131,25 @@ Instructions:
     });
   };
 
+  const handleStripeRedirect = () => {
+    // Save resume to sessionStorage so it survives the redirect back
+    sessionStorage.setItem("resume", resume);
+    sessionStorage.setItem("resumeName", form.name);
+    window.location.href = STRIPE_LINK;
+  };
+
+  // Restore resume from sessionStorage if returning from Stripe
+  useState(() => {
+    if (paid && !resume) {
+      const saved = sessionStorage.getItem("resume");
+      const savedName = sessionStorage.getItem("resumeName");
+      if (saved) {
+        setResume(saved);
+        if (savedName) setForm((f) => ({ ...f, name: savedName }));
+      }
+    }
+  });
+
   return (
     <div className="min-h-screen bg-stone-950 text-stone-100" style={{ fontFamily: "'DM Mono', monospace" }}>
       <style>{`
@@ -140,6 +161,7 @@ Instructions:
         ::-webkit-scrollbar-thumb { background: #44403c; border-radius: 2px; }
         @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         .fade-in { animation: fadeSlideIn 0.4s ease-out forwards; }
+        .blur-paywall { -webkit-mask-image: linear-gradient(to bottom, black 30%, transparent 70%); mask-image: linear-gradient(to bottom, black 30%, transparent 70%); }
       `}</style>
 
       {/* Header */}
@@ -152,8 +174,9 @@ Instructions:
           <span className="text-stone-600 text-xs font-mono ml-2 hidden sm:block">— craft your story</span>
         </div>
         <div className="flex items-center gap-2">
+          {paid && <span className="text-amber-500 text-xs font-mono border border-amber-500/30 px-2 py-0.5 rounded-sm">✦ unlocked</span>}
           <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-stone-500 text-xs font-mono">llama-powered · free</span>
+          <span className="text-stone-500 text-xs font-mono">ai-powered · free</span>
         </div>
       </header>
 
@@ -220,8 +243,22 @@ Instructions:
             )}
           </button>
 
+          {/* Pricing note */}
+          <div className="border border-stone-800 rounded-sm p-4 flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="text-stone-400 text-xs font-mono">Preview</span>
+              <span className="text-stone-400 text-xs font-mono">Free</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-amber-400 text-xs font-mono">Full Resume + Download</span>
+              <span className="text-amber-400 text-xs font-mono">250₹</span>
+            </div>
+            <div className="h-px bg-stone-800 my-1" />
+            <p className="text-stone-600 text-xs font-mono">One-time payment · Instant unlock · No subscription</p>
+          </div>
+
           <p className="text-stone-700 text-xs font-mono text-center">
-            Powered by OpenRouter · Free · No data stored
+            Powered by OpenRouter · No data stored
           </p>
         </div>
 
@@ -251,35 +288,73 @@ Instructions:
             </div>
           ) : (
             <div className="max-w-2xl mx-auto fade-in">
-              <div className="bg-stone-950 border border-stone-800 rounded-sm p-8 lg:p-10 shadow-2xl">
-                {renderMarkdown(resume)}
+
+              {/* Resume preview with paywall */}
+              <div className="relative bg-stone-950 border border-stone-800 rounded-sm shadow-2xl overflow-hidden">
+
+                {/* Resume content — blurred if not paid */}
+                <div className={`p-8 lg:p-10 ${!paid ? "blur-paywall" : ""}`}>
+                  {renderMarkdown(resume)}
+                </div>
+
+                {/* Paywall overlay */}
+                {!paid && (
+                  <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center justify-center pb-10 pt-20"
+                    style={{ background: "linear-gradient(to bottom, transparent, #0c0a09 40%)" }}>
+                    <div className="text-center px-6">
+                      <div className="w-10 h-10 rounded-full border border-amber-500/40 flex items-center justify-center mx-auto mb-3">
+                        <span className="text-amber-500 text-lg">🔒</span>
+                      </div>
+                      <p className="font-serif text-stone-200 text-lg mb-1">Your resume is ready</p>
+                      <p className="text-stone-500 text-xs font-mono mb-5">
+                        Unlock the full resume to download and copy
+                      </p>
+                      <button
+                        onClick={handleStripeRedirect}
+                        className="bg-amber-500 hover:bg-amber-400 text-stone-950 font-mono font-medium text-sm px-8 py-3.5 rounded-sm tracking-wider uppercase transition-all duration-200 inline-flex items-center gap-2 shadow-lg"
+                      >
+                        ✦ Unlock Full Resume — 250₹
+                      </button>
+                      <p className="text-stone-600 text-xs font-mono mt-3">
+                        One-time payment · Secure checkout via Razorpay
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="flex flex-wrap gap-3 mt-5">
-                <button
-                  onClick={() => {
-                    const blob = new Blob([resume], { type: "text/plain" });
-                    const a = document.createElement("a");
-                    a.href = URL.createObjectURL(blob);
-                    a.download = `${form.name.replace(/\s+/g, "_")}_Resume.txt`;
-                    a.click();
-                  }}
-                  className="flex items-center gap-2 border border-stone-700 hover:border-amber-500/50 hover:text-amber-400 text-stone-400 text-xs font-mono px-4 py-2.5 rounded-sm transition-all"
-                >
-                  ↓ Download .txt
-                </button>
-                <button
-                  onClick={() => navigator.clipboard.writeText(resume)}
-                  className="flex items-center gap-2 border border-stone-700 hover:border-amber-500/50 hover:text-amber-400 text-stone-400 text-xs font-mono px-4 py-2.5 rounded-sm transition-all"
-                >
-                  ⎘ Copy to Clipboard
-                </button>
-                <button
-                  onClick={() => setResume(null)}
-                  className="flex items-center gap-2 border border-stone-700 hover:border-stone-500 text-stone-600 text-xs font-mono px-4 py-2.5 rounded-sm transition-all ml-auto"
-                >
-                  ↺ Reset
-                </button>
-              </div>
+
+              {/* Action buttons — only if paid */}
+              {paid && (
+                <div className="flex flex-wrap gap-3 mt-5 fade-in">
+                  <div className="flex items-center gap-2 text-amber-500 text-xs font-mono mb-1 w-full">
+                    ✦ Full resume unlocked
+                  </div>
+                  <button
+                    onClick={() => {
+                      const blob = new Blob([resume], { type: "text/plain" });
+                      const a = document.createElement("a");
+                      a.href = URL.createObjectURL(blob);
+                      a.download = `${form.name.replace(/\s+/g, "_")}_Resume.txt`;
+                      a.click();
+                    }}
+                    className="flex items-center gap-2 border border-stone-700 hover:border-amber-500/50 hover:text-amber-400 text-stone-400 text-xs font-mono px-4 py-2.5 rounded-sm transition-all"
+                  >
+                    ↓ Download .txt
+                  </button>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(resume)}
+                    className="flex items-center gap-2 border border-stone-700 hover:border-amber-500/50 hover:text-amber-400 text-stone-400 text-xs font-mono px-4 py-2.5 rounded-sm transition-all"
+                  >
+                    ⎘ Copy to Clipboard
+                  </button>
+                  <button
+                    onClick={() => { setResume(null); sessionStorage.clear(); }}
+                    className="flex items-center gap-2 border border-stone-700 hover:border-stone-500 text-stone-600 text-xs font-mono px-4 py-2.5 rounded-sm transition-all ml-auto"
+                  >
+                    ↺ Reset
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
