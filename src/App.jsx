@@ -221,7 +221,7 @@ Instructions:
           </button>
 
           <p className="text-stone-700 text-xs font-mono text-center">
-            Powered by Llama 3.3 via OpenRouter · Free · No data stored
+            Powered by OpenRouter · Free · No data stored
           </p>
         </div>
 
