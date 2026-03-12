@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
 const LoadingDots = () => (
   <span className="inline-flex gap-1 items-center">
@@ -24,8 +24,6 @@ const InputField = ({ label, id, children }) => (
 const inputClass =
   "bg-stone-900 border border-stone-700 rounded-sm px-3 py-2.5 text-stone-100 font-mono text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/30 transition-colors resize-none w-full";
 
-const STRIPE_LINK = "https://rzp.io/rzp/9rtuKrD";
-
 export default function ResumeGenerator() {
   const [form, setForm] = useState({
     name: "",
@@ -38,12 +36,58 @@ export default function ResumeGenerator() {
   const [resume, setResume] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [paid] = useState(
-    new URLSearchParams(window.location.search).get("paid") === "true"
-  );
+  const [paid, setPaid] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const previewRef = useRef(null);
 
   const update = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  // Verify payment on redirect back from Razorpay
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const isPaid = params.get("paid") === "true";
+    const hasResume = !!sessionStorage.getItem("resume");
+    const wasRedirected = !!sessionStorage.getItem("redirected");
+
+    if (!isPaid || !hasResume || !wasRedirected) return;
+
+    const verifyPayment = async () => {
+      setVerifying(true);
+      try {
+        const res = await fetch("/.netlify/functions/verify-payment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            razorpay_payment_link_id: params.get("razorpay_payment_link_id"),
+            razorpay_payment_link_reference_id: params.get("razorpay_payment_link_reference_id"),
+            razorpay_payment_link_status: params.get("razorpay_payment_link_status"),
+            razorpay_payment_id: params.get("razorpay_payment_id"),
+            razorpay_signature: params.get("razorpay_signature"),
+          }),
+        });
+
+        const data = await res.json();
+
+        if (data.verified) {
+          const savedResume = sessionStorage.getItem("resume");
+          const savedForm = sessionStorage.getItem("resumeForm");
+          if (savedResume) setResume(savedResume);
+          if (savedForm) setForm(JSON.parse(savedForm));
+          setPaid(true);
+          sessionStorage.removeItem("redirected");
+          window.history.replaceState({}, "", "/");
+        } else {
+          setError("Payment verification failed. Please contact support.");
+        }
+      } catch (err) {
+        setError("Could not verify payment. Please contact support.");
+      } finally {
+        setVerifying(false);
+      }
+    };
+
+    verifyPayment();
+  }, []);
 
   const generateResume = async () => {
     if (!form.name || !form.experience || !form.skills) {
@@ -131,24 +175,26 @@ Instructions:
     });
   };
 
-  const handleStripeRedirect = () => {
-    // Save resume to sessionStorage so it survives the redirect back
-    sessionStorage.setItem("resume", resume);
-    sessionStorage.setItem("resumeName", form.name);
-    window.location.href = STRIPE_LINK;
-  };
+  const handlePayment = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/.netlify/functions/create-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: form.name, email: form.email }),
+      });
+      const data = await res.json();
+      if (!data.url) throw new Error("Failed to create payment link");
 
-  // Restore resume from sessionStorage if returning from Stripe
-  useState(() => {
-    if (paid && !resume) {
-      const saved = sessionStorage.getItem("resume");
-      const savedName = sessionStorage.getItem("resumeName");
-      if (saved) {
-        setResume(saved);
-        if (savedName) setForm((f) => ({ ...f, name: savedName }));
-      }
+      sessionStorage.setItem("resume", resume);
+      sessionStorage.setItem("resumeForm", JSON.stringify(form));
+      sessionStorage.setItem("redirected", "true");
+      window.location.href = data.url;
+    } catch (err) {
+      setError("Failed to create payment link. Please try again.");
+      setLoading(false);
     }
-  });
+  };
 
   return (
     <div className="min-h-screen bg-stone-950 text-stone-100" style={{ fontFamily: "'DM Mono', monospace" }}>
@@ -243,7 +289,6 @@ Instructions:
             )}
           </button>
 
-          {/* Pricing note */}
           <div className="border border-stone-800 rounded-sm p-4 flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <span className="text-stone-400 text-xs font-mono">Preview</span>
@@ -251,7 +296,7 @@ Instructions:
             </div>
             <div className="flex items-center justify-between">
               <span className="text-amber-400 text-xs font-mono">Full Resume + Download</span>
-              <span className="text-amber-400 text-xs font-mono">250₹</span>
+              <span className="text-amber-400 text-xs font-mono">₹250</span>
             </div>
             <div className="h-px bg-stone-800 my-1" />
             <p className="text-stone-600 text-xs font-mono">One-time payment · Instant unlock · No subscription</p>
@@ -264,7 +309,12 @@ Instructions:
 
         {/* RIGHT: Preview */}
         <div className="flex-1 bg-stone-900/40 p-8 lg:p-12 overflow-y-auto" ref={previewRef}>
-          {!resume && !loading ? (
+          {verifying ? (
+            <div className="h-full flex flex-col items-center justify-center gap-4">
+              <LoadingDots />
+              <p className="text-stone-500 text-xs font-mono animate-pulse">Verifying payment...</p>
+            </div>
+          ) : !resume && !loading ? (
             <div className="h-full flex flex-col items-center justify-center gap-6 text-center py-20">
               <div className="w-20 h-20 rounded-full border border-stone-700 flex items-center justify-center">
                 <span className="text-3xl text-stone-600">✦</span>
@@ -288,16 +338,11 @@ Instructions:
             </div>
           ) : (
             <div className="max-w-2xl mx-auto fade-in">
-
-              {/* Resume preview with paywall */}
               <div className="relative bg-stone-950 border border-stone-800 rounded-sm shadow-2xl overflow-hidden">
-
-                {/* Resume content — blurred if not paid */}
                 <div className={`p-8 lg:p-10 ${!paid ? "blur-paywall" : ""}`}>
                   {renderMarkdown(resume)}
                 </div>
 
-                {/* Paywall overlay */}
                 {!paid && (
                   <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center justify-center pb-10 pt-20"
                     style={{ background: "linear-gradient(to bottom, transparent, #0c0a09 40%)" }}>
@@ -310,10 +355,11 @@ Instructions:
                         Unlock the full resume to download and copy
                       </p>
                       <button
-                        onClick={handleStripeRedirect}
-                        className="bg-amber-500 hover:bg-amber-400 text-stone-950 font-mono font-medium text-sm px-8 py-3.5 rounded-sm tracking-wider uppercase transition-all duration-200 inline-flex items-center gap-2 shadow-lg"
+                        onClick={handlePayment}
+                        disabled={loading}
+                        className="bg-amber-500 hover:bg-amber-400 disabled:bg-stone-700 disabled:text-stone-500 text-stone-950 font-mono font-medium text-sm px-8 py-3.5 rounded-sm tracking-wider uppercase transition-all duration-200 inline-flex items-center gap-2 shadow-lg"
                       >
-                        ✦ Unlock Full Resume — 250₹
+                        {loading ? <><span className="text-stone-400 text-xs">Please wait</span><LoadingDots /></> : <>✦ Unlock Full Resume — ₹250</>}
                       </button>
                       <p className="text-stone-600 text-xs font-mono mt-3">
                         One-time payment · Secure checkout via Razorpay
@@ -323,7 +369,6 @@ Instructions:
                 )}
               </div>
 
-              {/* Action buttons — only if paid */}
               {paid && (
                 <div className="flex flex-wrap gap-3 mt-5 fade-in">
                   <div className="flex items-center gap-2 text-amber-500 text-xs font-mono mb-1 w-full">
@@ -348,7 +393,7 @@ Instructions:
                     ⎘ Copy to Clipboard
                   </button>
                   <button
-                    onClick={() => { setResume(null); sessionStorage.clear(); }}
+                    onClick={() => { setResume(null); setPaid(false); sessionStorage.clear(); }}
                     className="flex items-center gap-2 border border-stone-700 hover:border-stone-500 text-stone-600 text-xs font-mono px-4 py-2.5 rounded-sm transition-all ml-auto"
                   >
                     ↺ Reset
