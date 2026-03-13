@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import jsPDF from "jspdf";
 
 const LoadingDots = () => (
   <span className="inline-flex gap-1 items-center">
@@ -42,7 +43,6 @@ export default function ResumeGenerator() {
 
   const update = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  // Verify payment on redirect back from Razorpay
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const isPaid = params.get("paid") === "true";
@@ -119,46 +119,46 @@ Instructions:
 
     try {
       const models = [
-  "openai/gpt-oss-20b:free",
-  "openai/gpt-oss-120b:free",
-  "meta-llama/llama-3.3-70b-instruct:free",
-  "nvidia/nemotron-3-nano-30b-a3b:free",
-  "mistralai/mistral-small-3.1-24b-instruct:free",
-  "qwen/qwen3-4b:free",
-  "google/gemma-3-12b-it:free",
-  "google/gemma-3-27b-it:free",
-  "meta-llama/llama-3.2-3b-instruct:free",
-  "nousresearch/hermes-3-llama-3.1-405b:free",
-];
+        "openai/gpt-oss-20b:free",
+        "openai/gpt-oss-120b:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "nvidia/nemotron-3-nano-30b-a3b:free",
+        "mistralai/mistral-small-3.1-24b-instruct:free",
+        "qwen/qwen3-4b:free",
+        "google/gemma-3-12b-it:free",
+        "google/gemma-3-27b-it:free",
+        "meta-llama/llama-3.2-3b-instruct:free",
+        "nousresearch/hermes-3-llama-3.1-405b:free",
+      ];
 
-let text = null;
-for (const model of models) {
-  try {
-    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${import.meta.env.VITE_OPENROUTER_API_KEY}`,
-        "HTTP-Referer": window.location.href,
-        "X-Title": "ResumeAI",
-      },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) continue;
-    text = data.choices?.[0]?.message?.content;
-    if (text) break;
-  } catch {
-    continue;
-  }
-}
+      let text = null;
+      for (const model of models) {
+        try {
+          const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${import.meta.env.VITE_OPENROUTER_API_KEY}`,
+              "HTTP-Referer": window.location.href,
+              "X-Title": "ResumeAI",
+            },
+            body: JSON.stringify({
+              model,
+              messages: [{ role: "user", content: prompt }],
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) continue;
+          text = data.choices?.[0]?.message?.content;
+          if (text) break;
+        } catch {
+          continue;
+        }
+      }
 
-if (!text) throw new Error("All models are busy. Please try again in a few minutes.");
-text = text.replace(/^```markdown\n?/i, "").replace(/^```\n?/, "").replace(/```$/, "").trim();
-setResume(text);
+      if (!text) throw new Error("All models are busy. Please try again in a few minutes.");
+      text = text.replace(/^```markdown\n?/i, "").replace(/^```\n?/, "").replace(/```$/, "").trim();
+      setResume(text);
     } catch (err) {
       setError(`Error: ${err.message}`);
     } finally {
@@ -205,16 +205,54 @@ setResume(text);
         body: JSON.stringify({ name: form.name, email: form.email }),
       });
       const data = await res.json();
-      if (!data.url) throw new Error("Failed to create payment link");
-
+      if (!data.url) throw new Error(data.error || "Failed to create payment link");
       sessionStorage.setItem("resume", resume);
       sessionStorage.setItem("resumeForm", JSON.stringify(form));
       sessionStorage.setItem("redirected", "true");
       window.location.href = data.url;
     } catch (err) {
-      setError(`Payment error: ${err.message}`); 
+      setError(`Payment error: ${err.message}`);
       setLoading(false);
     }
+  };
+
+  const downloadPDF = () => {
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 20;
+    const maxWidth = pageWidth - margin * 2;
+    let y = 20;
+
+    resume.split("\n").forEach((line) => {
+      if (y > 270) { doc.addPage(); y = 20; }
+      if (line.startsWith("# ")) {
+        doc.setFont("helvetica", "bold"); doc.setFontSize(20); doc.setTextColor(30, 30, 30);
+        doc.text(line.slice(2), margin, y); y += 10;
+      } else if (line.startsWith("## ")) {
+        doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(180, 120, 0);
+        doc.text(line.slice(3).toUpperCase(), margin, y);
+        doc.setDrawColor(200, 200, 200); doc.line(margin, y + 1, pageWidth - margin, y + 1); y += 8;
+      } else if (line.startsWith("- ")) {
+        doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(60, 60, 60);
+        const cleaned = line.slice(2).replace(/\*\*(.*?)\*\*/g, "$1");
+        doc.splitTextToSize(`• ${cleaned}`, maxWidth - 5).forEach((l) => {
+          if (y > 270) { doc.addPage(); y = 20; }
+          doc.text(l, margin + 3, y); y += 5;
+        });
+      } else if (line.trim() === "") {
+        y += 3;
+      } else {
+        const cleaned = line.replace(/\*\*(.*?)\*\*/g, "$1");
+        doc.setFont("helvetica", line.includes("**") ? "bold" : "normal");
+        doc.setFontSize(10); doc.setTextColor(60, 60, 60);
+        doc.splitTextToSize(cleaned, maxWidth).forEach((l) => {
+          if (y > 270) { doc.addPage(); y = 20; }
+          doc.text(l, margin, y); y += 5;
+        });
+      }
+    });
+
+    doc.save(`${form.name.replace(/\s+/g, "_")}_Resume.pdf`);
   };
 
   return (
@@ -231,7 +269,6 @@ setResume(text);
         .blur-paywall { -webkit-mask-image: linear-gradient(to bottom, black 30%, transparent 70%); mask-image: linear-gradient(to bottom, black 30%, transparent 70%); }
       `}</style>
 
-      {/* Header */}
       <header className="border-b border-stone-800 px-8 py-5 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-7 h-7 rounded-sm bg-amber-500 flex items-center justify-center">
@@ -248,7 +285,6 @@ setResume(text);
       </header>
 
       <div className="flex flex-col lg:flex-row min-h-[calc(100vh-65px)]">
-        {/* LEFT: Form */}
         <div className="w-full lg:w-[420px] lg:min-w-[420px] border-r border-stone-800 p-8 flex flex-col gap-6 overflow-y-auto">
           <div>
             <h2 className="font-serif text-xl text-stone-100 mb-1">Build Your Resume</h2>
@@ -266,26 +302,19 @@ setResume(text);
                 <input id="title" value={form.title} onChange={update("title")} placeholder="Sr. Engineer" className={inputClass} />
               </InputField>
             </div>
-
             <InputField label="Email" id="email">
               <input id="email" value={form.email} onChange={update("email")} placeholder="jane@example.com" className={inputClass} />
             </InputField>
-
             <InputField label="Work Experience *" id="experience">
-              <textarea
-                id="experience" rows={5} value={form.experience} onChange={update("experience")}
+              <textarea id="experience" rows={5} value={form.experience} onChange={update("experience")}
                 placeholder={`Senior Dev at Acme Corp (2020–2024)\n• Led migration to microservices\n• Managed team of 6 engineers\n\nDev at StartupXYZ (2017–2020)\n• Built React dashboards`}
-                className={inputClass}
-              />
+                className={inputClass} />
             </InputField>
-
             <InputField label="Skills *" id="skills">
               <textarea id="skills" rows={3} value={form.skills} onChange={update("skills")}
                 placeholder="React, TypeScript, Node.js, AWS, PostgreSQL, Python" className={inputClass} />
             </InputField>
-
             <div className="h-px bg-stone-800" />
-
             <InputField label="Target Job Description (optional)" id="jobDescription">
               <textarea id="jobDescription" rows={4} value={form.jobDescription} onChange={update("jobDescription")}
                 placeholder="Paste the job description here to tailor your resume..." className={inputClass} />
@@ -298,16 +327,9 @@ setResume(text);
             </div>
           )}
 
-          <button
-            onClick={generateResume}
-            disabled={loading}
-            className="bg-amber-500 hover:bg-amber-400 disabled:bg-stone-700 disabled:text-stone-500 text-stone-950 font-mono font-medium text-sm px-6 py-3.5 rounded-sm tracking-wider uppercase transition-all duration-200 flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <><span className="text-stone-400 text-xs">Generating</span><LoadingDots /></>
-            ) : (
-              <><span>✦</span><span>Generate Resume</span></>
-            )}
+          <button onClick={generateResume} disabled={loading}
+            className="bg-amber-500 hover:bg-amber-400 disabled:bg-stone-700 disabled:text-stone-500 text-stone-950 font-mono font-medium text-sm px-6 py-3.5 rounded-sm tracking-wider uppercase transition-all duration-200 flex items-center justify-center gap-2">
+            {loading ? <><span className="text-stone-400 text-xs">Generating</span><LoadingDots /></> : <><span>✦</span><span>Generate Resume</span></>}
           </button>
 
           <div className="border border-stone-800 rounded-sm p-4 flex flex-col gap-2">
@@ -316,19 +338,16 @@ setResume(text);
               <span className="text-stone-400 text-xs font-mono">Free</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-amber-400 text-xs font-mono">Full Resume + Download</span>
+              <span className="text-amber-400 text-xs font-mono">Full Resume + PDF Download</span>
               <span className="text-amber-400 text-xs font-mono">₹99</span>
             </div>
             <div className="h-px bg-stone-800 my-1" />
             <p className="text-stone-600 text-xs font-mono">One-time payment · Instant unlock · No subscription</p>
           </div>
 
-          <p className="text-stone-700 text-xs font-mono text-center">
-            Powered by OpenRouter · No data stored
-          </p>
+          <p className="text-stone-700 text-xs font-mono text-center">Powered by OpenRouter · No data stored</p>
         </div>
 
-        {/* RIGHT: Preview */}
         <div className="flex-1 bg-stone-900/40 p-8 lg:p-12 overflow-y-auto" ref={previewRef}>
           {verifying ? (
             <div className="h-full flex flex-col items-center justify-center gap-4">
@@ -342,9 +361,7 @@ setResume(text);
               </div>
               <div>
                 <p className="font-serif text-stone-400 text-xl mb-2">Your resume preview</p>
-                <p className="text-stone-600 text-xs font-mono max-w-xs">
-                  Fill in your details and click Generate to create a tailored, professional resume.
-                </p>
+                <p className="text-stone-600 text-xs font-mono max-w-xs">Fill in your details and click Generate to create a tailored, professional resume.</p>
               </div>
               <div className="flex flex-wrap justify-center gap-3 mt-4">
                 {["Professional Summary", "Work Experience", "Skills"].map((s) => (
@@ -363,7 +380,6 @@ setResume(text);
                 <div className={`p-8 lg:p-10 ${!paid ? "blur-paywall" : ""}`}>
                   {renderMarkdown(resume)}
                 </div>
-
                 {!paid && (
                   <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center justify-center pb-10 pt-20"
                     style={{ background: "linear-gradient(to bottom, transparent, #0c0a09 40%)" }}>
@@ -372,19 +388,12 @@ setResume(text);
                         <span className="text-amber-500 text-lg">🔒</span>
                       </div>
                       <p className="font-serif text-stone-200 text-lg mb-1">Your resume is ready</p>
-                      <p className="text-stone-500 text-xs font-mono mb-5">
-                        Unlock the full resume to download and copy
-                      </p>
-                      <button
-                        onClick={handlePayment}
-                        disabled={loading}
-                        className="bg-amber-500 hover:bg-amber-400 disabled:bg-stone-700 disabled:text-stone-500 text-stone-950 font-mono font-medium text-sm px-8 py-3.5 rounded-sm tracking-wider uppercase transition-all duration-200 inline-flex items-center gap-2 shadow-lg"
-                      >
+                      <p className="text-stone-500 text-xs font-mono mb-5">Unlock to download as PDF</p>
+                      <button onClick={handlePayment} disabled={loading}
+                        className="bg-amber-500 hover:bg-amber-400 disabled:bg-stone-700 disabled:text-stone-500 text-stone-950 font-mono font-medium text-sm px-8 py-3.5 rounded-sm tracking-wider uppercase transition-all duration-200 inline-flex items-center gap-2 shadow-lg">
                         {loading ? <><span className="text-stone-400 text-xs">Please wait</span><LoadingDots /></> : <>✦ Unlock Full Resume — ₹99</>}
                       </button>
-                      <p className="text-stone-600 text-xs font-mono mt-3">
-                        One-time payment · Secure checkout via Razorpay
-                      </p>
+                      <p className="text-stone-600 text-xs font-mono mt-3">One-time payment · Secure checkout via Razorpay</p>
                     </div>
                   </div>
                 )}
@@ -395,28 +404,25 @@ setResume(text);
                   <div className="flex items-center gap-2 text-amber-500 text-xs font-mono mb-1 w-full">
                     ✦ Full resume unlocked
                   </div>
-                  <button
-                    onClick={() => {
-                      const blob = new Blob([resume], { type: "text/plain" });
-                      const a = document.createElement("a");
-                      a.href = URL.createObjectURL(blob);
-                      a.download = `${form.name.replace(/\s+/g, "_")}_Resume.txt`;
-                      a.click();
-                    }}
-                    className="flex items-center gap-2 border border-stone-700 hover:border-amber-500/50 hover:text-amber-400 text-stone-400 text-xs font-mono px-4 py-2.5 rounded-sm transition-all"
-                  >
+                  <button onClick={downloadPDF}
+                    className="flex items-center gap-2 border border-amber-500/50 hover:border-amber-400 hover:text-amber-400 text-amber-500 text-xs font-mono px-4 py-2.5 rounded-sm transition-all">
+                    ↓ Download PDF
+                  </button>
+                  <button onClick={() => {
+                    const blob = new Blob([resume], { type: "text/plain" });
+                    const a = document.createElement("a");
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `${form.name.replace(/\s+/g, "_")}_Resume.txt`;
+                    a.click();
+                  }} className="flex items-center gap-2 border border-stone-700 hover:border-amber-500/50 hover:text-amber-400 text-stone-400 text-xs font-mono px-4 py-2.5 rounded-sm transition-all">
                     ↓ Download .txt
                   </button>
-                  <button
-                    onClick={() => navigator.clipboard.writeText(resume)}
-                    className="flex items-center gap-2 border border-stone-700 hover:border-amber-500/50 hover:text-amber-400 text-stone-400 text-xs font-mono px-4 py-2.5 rounded-sm transition-all"
-                  >
+                  <button onClick={() => navigator.clipboard.writeText(resume)}
+                    className="flex items-center gap-2 border border-stone-700 hover:border-amber-500/50 hover:text-amber-400 text-stone-400 text-xs font-mono px-4 py-2.5 rounded-sm transition-all">
                     ⎘ Copy to Clipboard
                   </button>
-                  <button
-                    onClick={() => { setResume(null); setPaid(false); sessionStorage.clear(); }}
-                    className="flex items-center gap-2 border border-stone-700 hover:border-stone-500 text-stone-600 text-xs font-mono px-4 py-2.5 rounded-sm transition-all ml-auto"
-                  >
+                  <button onClick={() => { setResume(null); setPaid(false); sessionStorage.clear(); }}
+                    className="flex items-center gap-2 border border-stone-700 hover:border-stone-500 text-stone-600 text-xs font-mono px-4 py-2.5 rounded-sm transition-all ml-auto">
                     ↺ Reset
                   </button>
                 </div>
