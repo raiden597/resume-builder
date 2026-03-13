@@ -118,26 +118,47 @@ Instructions:
 - Return ONLY the resume content, no commentary`;
 
     try {
-      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${import.meta.env.VITE_OPENROUTER_API_KEY}`,
-          "HTTP-Referer": window.location.href,
-          "X-Title": "ResumeAI",
-        },
-        body: JSON.stringify({
-          model: "google/gemma-3-12b-it:free",
-          messages: [{ role: "user", content: prompt }],
-        }),
-      });
+      const models = [
+  "openai/gpt-oss-20b:free",
+  "openai/gpt-oss-120b:free",
+  "meta-llama/llama-3.3-70b-instruct:free",
+  "nvidia/nemotron-3-nano-30b-a3b:free",
+  "mistralai/mistral-small-3.1-24b-instruct:free",
+  "qwen/qwen3-4b:free",
+  "google/gemma-3-12b-it:free",
+  "google/gemma-3-27b-it:free",
+  "meta-llama/llama-3.2-3b-instruct:free",
+  "nousresearch/hermes-3-llama-3.1-405b:free",
+];
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error?.message || "API request failed");
-      let text = data.choices?.[0]?.message?.content;
-      if (!text) throw new Error("No response received");
-      text = text.replace(/^```markdown\n?/i, "").replace(/^```\n?/, "").replace(/```$/, "").trim();
-      setResume(text);
+let text = null;
+for (const model of models) {
+  try {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${import.meta.env.VITE_OPENROUTER_API_KEY}`,
+        "HTTP-Referer": window.location.href,
+        "X-Title": "ResumeAI",
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) continue;
+    text = data.choices?.[0]?.message?.content;
+    if (text) break;
+  } catch {
+    continue;
+  }
+}
+
+if (!text) throw new Error("All models are busy. Please try again in a few minutes.");
+text = text.replace(/^```markdown\n?/i, "").replace(/^```\n?/, "").replace(/```$/, "").trim();
+setResume(text);
     } catch (err) {
       setError(`Error: ${err.message}`);
     } finally {
@@ -191,7 +212,7 @@ Instructions:
       sessionStorage.setItem("redirected", "true");
       window.location.href = data.url;
     } catch (err) {
-      setError("Failed to create payment link. Please try again.");
+      setError(`Payment error: ${err.message}`); 
       setLoading(false);
     }
   };
@@ -222,7 +243,7 @@ Instructions:
         <div className="flex items-center gap-2">
           {paid && <span className="text-amber-500 text-xs font-mono border border-amber-500/30 px-2 py-0.5 rounded-sm">✦ unlocked</span>}
           <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-stone-500 text-xs font-mono">ai-powered · free</span>
+          <span className="text-stone-500 text-xs font-mono">ai-powered</span>
         </div>
       </header>
 
