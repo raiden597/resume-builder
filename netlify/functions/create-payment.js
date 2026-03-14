@@ -14,7 +14,7 @@ exports.handler = async (event) => {
       "Authorization": `Basic ${auth}`,
     },
     body: JSON.stringify({
-      amount: 9900,
+      amount: 900,
       currency: "INR",
       description: "Full Resume Unlock",
       customer: {

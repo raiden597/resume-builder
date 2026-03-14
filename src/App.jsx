@@ -25,6 +25,27 @@ const InputField = ({ label, id, children }) => (
 const inputClass =
   "bg-stone-900 border border-stone-700 rounded-sm px-3 py-2.5 text-stone-100 font-mono text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/30 transition-colors resize-none w-full";
 
+const templates = {
+  classic: {
+    h1: "font-serif text-2xl text-stone-100 mb-1",
+    h2: "font-serif text-amber-400 text-base uppercase tracking-widest mt-6 mb-2 border-b border-stone-700 pb-1",
+    li: "text-stone-300 text-sm leading-relaxed ml-3 list-disc font-mono",
+    p: "text-stone-400 text-sm leading-relaxed font-mono",
+  },
+  modern: {
+    h1: "text-3xl font-bold text-white mb-1 tracking-tight",
+    h2: "text-sm font-bold text-emerald-400 uppercase tracking-widest mt-6 mb-2 border-l-2 border-emerald-400 pl-3",
+    li: "text-stone-300 text-sm leading-relaxed ml-4 list-disc",
+    p: "text-stone-300 text-sm leading-relaxed",
+  },
+  minimal: {
+    h1: "text-2xl font-light text-stone-100 mb-1 tracking-widest uppercase",
+    h2: "text-xs text-stone-500 uppercase tracking-widest mt-8 mb-3 font-mono",
+    li: "text-stone-400 text-sm leading-relaxed ml-3 list-disc font-light",
+    p: "text-stone-400 text-sm leading-relaxed font-light",
+  },
+};
+
 export default function ResumeGenerator() {
   const [form, setForm] = useState({
     name: "",
@@ -39,6 +60,7 @@ export default function ResumeGenerator() {
   const [error, setError] = useState(null);
   const [paid, setPaid] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [template, setTemplate] = useState("classic");
   const previewRef = useRef(null);
 
   const update = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -71,8 +93,10 @@ export default function ResumeGenerator() {
         if (data.verified) {
           const savedResume = sessionStorage.getItem("resume");
           const savedForm = sessionStorage.getItem("resumeForm");
+          const savedTemplate = sessionStorage.getItem("resumeTemplate");
           if (savedResume) setResume(savedResume);
           if (savedForm) setForm(JSON.parse(savedForm));
+          if (savedTemplate) setTemplate(savedTemplate);
           setPaid(true);
           sessionStorage.removeItem("redirected");
           window.history.replaceState({}, "", "/");
@@ -167,32 +191,19 @@ Instructions:
   };
 
   const renderMarkdown = (text) => {
+    const t = templates[template];
     return text.split("\n").map((line, i) => {
       if (line.startsWith("## "))
-        return (
-          <h2 key={i} className="font-serif text-amber-400 text-base uppercase tracking-widest mt-6 mb-2 border-b border-stone-700 pb-1">
-            {line.slice(3)}
-          </h2>
-        );
+        return <h2 key={i} className={t.h2}>{line.slice(3)}</h2>;
       if (line.startsWith("# "))
-        return (
-          <h1 key={i} className="font-serif text-2xl text-stone-100 mb-1">
-            {line.slice(2)}
-          </h1>
-        );
+        return <h1 key={i} className={t.h1}>{line.slice(2)}</h1>;
       if (line.startsWith("- ")) {
         const content = line.slice(2).replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
-        return (
-          <li key={i} className="text-stone-300 text-sm leading-relaxed ml-3 list-disc font-mono"
-            dangerouslySetInnerHTML={{ __html: content }} />
-        );
+        return <li key={i} className={t.li} dangerouslySetInnerHTML={{ __html: content }} />;
       }
       if (line.trim() === "") return <div key={i} className="h-2" />;
       const content = line.replace(/\*\*(.*?)\*\*/g, "<strong class='text-stone-100'>$1</strong>");
-      return (
-        <p key={i} className="text-stone-400 text-sm leading-relaxed font-mono"
-          dangerouslySetInnerHTML={{ __html: content }} />
-      );
+      return <p key={i} className={t.p} dangerouslySetInnerHTML={{ __html: content }} />;
     });
   };
 
@@ -208,6 +219,7 @@ Instructions:
       if (!data.url) throw new Error(data.error || "Failed to create payment link");
       sessionStorage.setItem("resume", resume);
       sessionStorage.setItem("resumeForm", JSON.stringify(form));
+      sessionStorage.setItem("resumeTemplate", template);
       sessionStorage.setItem("redirected", "true");
       window.location.href = data.url;
     } catch (err) {
@@ -223,15 +235,34 @@ Instructions:
     const maxWidth = pageWidth - margin * 2;
     let y = 20;
 
+    const accentColor = {
+      classic: [180, 120, 0],
+      modern: [52, 211, 153],
+      minimal: [120, 120, 120],
+    }[template];
+
     resume.split("\n").forEach((line) => {
       if (y > 270) { doc.addPage(); y = 20; }
       if (line.startsWith("# ")) {
-        doc.setFont("helvetica", "bold"); doc.setFontSize(20); doc.setTextColor(30, 30, 30);
+        doc.setFont("helvetica", template === "minimal" ? "normal" : "bold");
+        doc.setFontSize(template === "minimal" ? 16 : 20);
+        doc.setTextColor(30, 30, 30);
         doc.text(line.slice(2), margin, y); y += 10;
       } else if (line.startsWith("## ")) {
-        doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(180, 120, 0);
-        doc.text(line.slice(3).toUpperCase(), margin, y);
-        doc.setDrawColor(200, 200, 200); doc.line(margin, y + 1, pageWidth - margin, y + 1); y += 8;
+        doc.setFont("helvetica", "bold"); doc.setFontSize(11);
+        doc.setTextColor(...accentColor);
+        if (template === "modern") {
+          doc.setFillColor(...accentColor);
+          doc.rect(margin, y - 4, 2, 5, "F");
+          doc.text(line.slice(3).toUpperCase(), margin + 5, y);
+        } else {
+          doc.text(line.slice(3).toUpperCase(), margin, y);
+          if (template === "classic") {
+            doc.setDrawColor(200, 200, 200);
+            doc.line(margin, y + 1, pageWidth - margin, y + 1);
+          }
+        }
+        y += 8;
       } else if (line.startsWith("- ")) {
         doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(60, 60, 60);
         const cleaned = line.slice(2).replace(/\*\*(.*?)\*\*/g, "$1");
@@ -252,7 +283,7 @@ Instructions:
       }
     });
 
-    doc.save(`${form.name.replace(/\s+/g, "_")}_Resume.pdf`);
+    doc.save(`${form.name.replace(/\s+/g, "_")}_Resume_${template}.pdf`);
   };
 
   return (
@@ -319,6 +350,31 @@ Instructions:
               <textarea id="jobDescription" rows={4} value={form.jobDescription} onChange={update("jobDescription")}
                 placeholder="Paste the job description here to tailor your resume..." className={inputClass} />
             </InputField>
+
+            {/* Template Selector */}
+            <div className="flex flex-col gap-2">
+              <label className="text-xs tracking-widest uppercase font-mono text-stone-400">Template</label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: "classic", label: "Classic", dot: "bg-amber-500" },
+                  { id: "modern", label: "Modern", dot: "bg-emerald-500" },
+                  { id: "minimal", label: "Minimal", dot: "bg-stone-400" },
+                ].map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => setTemplate(t.id)}
+                    className={`py-2.5 text-xs font-mono rounded-sm border transition-all flex flex-col items-center gap-1.5 ${
+                      template === t.id
+                        ? "border-amber-500 text-amber-400 bg-amber-500/10"
+                        : "border-stone-700 text-stone-500 hover:border-stone-500 hover:text-stone-400"
+                    }`}
+                  >
+                    <div className={`w-2 h-2 rounded-full ${t.dot}`} />
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           {error && (
@@ -339,7 +395,7 @@ Instructions:
             </div>
             <div className="flex items-center justify-between">
               <span className="text-amber-400 text-xs font-mono">Full Resume + PDF Download</span>
-              <span className="text-amber-400 text-xs font-mono">₹99</span>
+              <span className="text-amber-400 text-xs font-mono">₹9 (Limited Time)</span>
             </div>
             <div className="h-px bg-stone-800 my-1" />
             <p className="text-stone-600 text-xs font-mono">One-time payment · Instant unlock · No subscription</p>
@@ -376,6 +432,17 @@ Instructions:
             </div>
           ) : (
             <div className="max-w-2xl mx-auto fade-in">
+              {/* Template badge */}
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-stone-600 text-xs font-mono">Template:</span>
+                <span className="text-xs font-mono capitalize px-2 py-0.5 rounded-sm border border-stone-700 text-stone-400">
+                  {template}
+                </span>
+                {!paid && (
+                  <span className="text-xs font-mono text-stone-600 ml-auto">switch template anytime</span>
+                )}
+              </div>
+
               <div className="relative bg-stone-950 border border-stone-800 rounded-sm shadow-2xl overflow-hidden">
                 <div className={`p-8 lg:p-10 ${!paid ? "blur-paywall" : ""}`}>
                   {renderMarkdown(resume)}
@@ -391,7 +458,7 @@ Instructions:
                       <p className="text-stone-500 text-xs font-mono mb-5">Unlock to download as PDF</p>
                       <button onClick={handlePayment} disabled={loading}
                         className="bg-amber-500 hover:bg-amber-400 disabled:bg-stone-700 disabled:text-stone-500 text-stone-950 font-mono font-medium text-sm px-8 py-3.5 rounded-sm tracking-wider uppercase transition-all duration-200 inline-flex items-center gap-2 shadow-lg">
-                        {loading ? <><span className="text-stone-400 text-xs">Please wait</span><LoadingDots /></> : <>✦ Unlock Full Resume — ₹99</>}
+                        {loading ? <><span className="text-stone-400 text-xs">Please wait</span><LoadingDots /></> : <>✦ Unlock Full Resume — ₹9</>}
                       </button>
                       <p className="text-stone-600 text-xs font-mono mt-3">One-time payment · Secure checkout via Razorpay</p>
                     </div>
