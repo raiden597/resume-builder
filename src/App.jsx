@@ -182,6 +182,7 @@ Instructions:
 
       if (!text) throw new Error("All models are busy. Please try again in a few minutes.");
       text = text.replace(/^```markdown\n?/i, "").replace(/^```\n?/, "").replace(/```$/, "").trim();
+      text = text.replace(/^(#{1,3})([^ #])/gm, "$1 $2");
       setResume(text);
     } catch (err) {
       setError(`Error: ${err.message}`);
