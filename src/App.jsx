@@ -185,7 +185,12 @@ STRICT FORMATTING RULES — follow exactly:
       if (!text) throw new Error("All models are busy. Please try again in a few minutes.");
       text = text.replace(/^```markdown\n?/i, "").replace(/^```\n?/, "").replace(/```$/, "").trim();
       text = text.replace(/^(#{1,3})([^ #])/gm, "$1 $2");
-      text = text.replace(/^\* /gm, "- "); // normalize * bullets to -
+      // Bold short job title lines containing "at" or a year
+text = text.replace(/^\* (.{5,80}(?:\bat\b|\d{4}).{0,40})$/gm, (match, p1) => {
+  return p1.length < 80 ? `**${p1}**` : `- ${p1}`;
+});
+// Convert remaining * bullets to -
+text = text.replace(/^\* /gm, "- ");
       setResume(text);
     } catch (err) {
       setError(`Error: ${err.message}`);
