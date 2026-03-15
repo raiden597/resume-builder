@@ -132,14 +132,16 @@ Candidate Info:
 - Skills: ${form.skills}
 ${form.jobDescription ? `\nTarget Job Description:\n${form.jobDescription}` : ""}
 
-Instructions:
-- Write a compelling professional summary (2-3 sentences)
-- Format experience as bullet points starting with strong action verbs
-- Tailor content to the job description if provided
-- Include a skills section organized by category
-- Keep it concise, impactful, and professional
-- Use markdown formatting with ## for sections, **bold** for job titles/companies
-- Return ONLY the resume content, no commentary`;
+STRICT FORMATTING RULES — follow exactly:
+- Start with # Full Name on line 1
+- Every section MUST start with ## (e.g. ## Professional Summary)
+- ALWAYS put a blank line before and after every ## heading
+- Use ONLY - for bullet points, never use * or •
+- Use **bold** only for job titles and company names
+- Do NOT merge a heading and text on the same line
+- Write a compelling 2-3 sentence professional summary
+- Include skills organized by category
+- Return ONLY the resume, no extra commentary`;
 
     try {
       const models = [
@@ -200,15 +202,11 @@ Instructions:
       if (line.startsWith("# "))
         return <h1 key={i} className={t.h1}>{line.slice(2)}</h1>;
       if (line.startsWith("- ")) {
-        const content = line.slice(2)
-           .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-           .replace(/\*(.*?)\*/g, "<em class='text-stone-300'>$1</em>");
+        const content = line.slice(2).replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
         return <li key={i} className={t.li} dangerouslySetInnerHTML={{ __html: content }} />;
       }
       if (line.trim() === "") return <div key={i} className="h-2" />;
-      const content = line
-         .replace(/\*\*(.*?)\*\*/g, "<strong class='text-stone-100'>$1</strong>")
-         .replace(/\*(.*?)\*/g, "<em class='text-stone-300'>$1</em>");
+      const content = line.replace(/\*\*(.*?)\*\*/g, "<strong class='text-stone-100'>$1</strong>");
       return <p key={i} className={t.p} dangerouslySetInnerHTML={{ __html: content }} />;
     });
   };
