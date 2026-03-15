@@ -183,6 +183,7 @@ Instructions:
       if (!text) throw new Error("All models are busy. Please try again in a few minutes.");
       text = text.replace(/^```markdown\n?/i, "").replace(/^```\n?/, "").replace(/```$/, "").trim();
       text = text.replace(/^(#{1,3})([^ #])/gm, "$1 $2");
+      text = text.replace(/^\* /gm, "- "); // normalize * bullets to -
       setResume(text);
     } catch (err) {
       setError(`Error: ${err.message}`);
@@ -199,11 +200,15 @@ Instructions:
       if (line.startsWith("# "))
         return <h1 key={i} className={t.h1}>{line.slice(2)}</h1>;
       if (line.startsWith("- ")) {
-        const content = line.slice(2).replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+        const content = line.slice(2)
+           .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+           .replace(/\*(.*?)\*/g, "<em class='text-stone-300'>$1</em>");
         return <li key={i} className={t.li} dangerouslySetInnerHTML={{ __html: content }} />;
       }
       if (line.trim() === "") return <div key={i} className="h-2" />;
-      const content = line.replace(/\*\*(.*?)\*\*/g, "<strong class='text-stone-100'>$1</strong>");
+      const content = line
+         .replace(/\*\*(.*?)\*\*/g, "<strong class='text-stone-100'>$1</strong>")
+         .replace(/\*(.*?)\*/g, "<em class='text-stone-300'>$1</em>");
       return <p key={i} className={t.p} dangerouslySetInnerHTML={{ __html: content }} />;
     });
   };
